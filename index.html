@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Digifant Monitor</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;500;700&display=swap');
+
+:root {
+  --bg:       #0a0c0f;
+  --panel:    #111418;
+  --border:   #1e2530;
+  --dim:      #1a2030;
+  --accent:   #00d4ff;
+  --green:    #00e676;
+  --amber:    #ffab00;
+  --red:      #ff3d3d;
+  --purple:   #b388ff;
+  --text:     #cdd6e8;
+  --muted:    #4a5568;
+  --font-mono: 'Share Tech Mono', monospace;
+  --font-ui:   'Barlow Condensed', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── HEADER ── */
+#header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  height: 44px;
+  flex-shrink: 0;
+}
+
+#header h1 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
+.hdr-right { display: flex; align-items: center; gap: 8px; }
+
+/* Pill BLE (izquierda del header) */
+.ble-pill {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  background: var(--dim);
+  white-space: nowrap;
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex-shrink:0; }
+.dot.on   { background: var(--green);  box-shadow: 0 0 5px var(--green); }
+.dot.err  { background: var(--red); }
+.dot.wait { background: var(--amber);  animation: blink 1s infinite; }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* Indicadores de estado (emojis) en el header */
+.hdr-indicators { display: flex; align-items: center; gap: 4px; }
+
+.ind {
+  position: relative;
+  font-size: 18px;
+  line-height: 1;
+  cursor: default;
+  opacity: 0.22;          /* apagado por defecto */
+  transition: opacity .3s, filter .3s;
+  filter: grayscale(1);
+}
+.ind.active {
+  opacity: 1;
+  filter: none;
+}
+.ind.pulse { animation: indpulse 1.2s ease-in-out infinite; }
+@keyframes indpulse { 0%,100%{opacity:1} 50%{opacity:.45} }
+
+/* Tooltip nativo al hacer hover/tap largo */
+.ind[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1c2333;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 99;
+}
+
+#btnConnect {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  transition: background .2s;
+}
+#btnConnect:hover { background: rgba(0,212,255,.1); }
+#btnConnect.disc  { border-color: var(--red); color: var(--red); }
+#btnConnect.disc:hover { background: rgba(255,61,61,.1); }
+
+/* ── LAYOUT ── */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 44px - 20px);
+}
+
+/* Tabs */
+#tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  flex-shrink: 0;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all .2s;
+  font-family: var(--font-ui);
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Panels */
+.panel { display: none; flex: 1; overflow: hidden; }
+.panel.active { display: flex; flex-direction: column; }
+
+/* ── GAUGES PANEL ── */
+#pGauges {
+  padding: 8px;
+  overflow-y: auto;
+  flex-wrap: wrap;
+  flex-direction: row;
+  align-content: flex-start;
+  gap: 8px;
+}
+
+.gauge-wrap {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 6px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  flex: 0 0 calc(33.33% - 6px);
+}
+
+@media (max-width: 600px) {
+  .gauge-wrap { flex: 0 0 calc(50% - 4px); }
+}
+
+.gauge-label {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 2px;
+  font-family: var(--font-ui);
+}
+
+.gauge-canvas { display: block; }
+
+.gauge-val {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--accent);
+  margin-top: -4px;
+  letter-spacing: -0.5px;
+}
+
+.gauge-unit {
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 1px;
+  font-family: var(--font-ui);
+}
+
+/* ── FLAGS PANEL ── */
+#pFlags {
+  padding: 12px;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.flags-header {
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+}
+
+.flags-byte {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.bit-box {
+  flex: 1;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--dim);
+  color: var(--muted);
+  transition: all .3s;
+}
+.bit-box.set { background: rgba(255,171,0,.15); border-color: var(--amber); color: var(--amber); }
+
+.flag-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--dim);
+  transition: all .3s;
+}
+.flag-row.active { border-color: var(--amber); background: rgba(255,171,0,.07); }
+.flag-row.ok-row { border-color: var(--green); background: rgba(0,230,118,.07); }
+
+.flag-bit-indicator {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.flag-bit-indicator.set { background: var(--amber); color: #000; border-color: var(--amber); font-weight: 700; }
+
+.flag-text { font-size: 13px; font-weight: 500; line-height: 1.3; }
+.flag-text small { display: block; font-size: 10px; color: var(--muted); font-weight: 300; margin-top: 2px; }
+
+/* ── FAULTS PANEL ── */
+#pFaults {
+  padding: 12px;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.no-faults {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--green);
+  font-size: 15px;
+  font-family: var(--font-mono);
+  letter-spacing: 2px;
+}
+.no-faults::before { content: "✓ "; }
+
+.fault-card {
+  background: rgba(255,61,61,.07);
+  border: 1px solid rgba(255,61,61,.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.fault-code { font-family: var(--font-mono); font-size: 13px; color: var(--red); font-weight: 700; }
+.fault-desc { font-size: 12px; color: var(--text); margin-top: 4px; line-height: 1.4; }
+.fault-elab { font-size: 10px; color: var(--muted); margin-top: 3px; font-family: var(--font-mono); }
+
+/* ── KWP STATUS STRIP ── */
+#kwpStrip {
+  height: 20px;
+  background: var(--dim);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  transition: color .3s, background .3s;
+}
+#kwpStrip.ks-busy   { color: var(--amber); }
+#kwpStrip.ks-ok     { color: var(--green); background: rgba(0,230,118,.04); }
+#kwpStrip.ks-err    { color: var(--red);   background: rgba(255,61,61,.04); }
+#kwpDot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--muted); flex-shrink: 0;
+  transition: background .3s;
+}
+#kwpStrip.ks-busy  #kwpDot { background: var(--amber); animation: blink 1s infinite; }
+#kwpStrip.ks-ok    #kwpDot { background: var(--green); box-shadow: 0 0 4px var(--green); }
+#kwpStrip.ks-err   #kwpDot { background: var(--red); }
+#statusBar {
+  height: 22px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.sb-item { font-size: 10px; font-family: var(--font-mono); color: var(--muted); }
+.sb-item span { color: var(--text); }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <h1>⬡ DIGIFANT</h1>
+  <div class="hdr-right">
+
+    <!-- Indicadores de estado -->
+    <div class="hdr-indicators">
+
+      <!-- BLE: bluetooth conectado al ESP32 -->
+      <span class="ind" id="indBle" title="BLE: sin conexión al ESP32">📡</span>
+
+      <!-- KWP: estado de conexión con la ECU por K-Line -->
+      <span class="ind" id="indKwp" title="K-Line: sin conexión con ECU">🔌</span>
+
+      <!-- Check engine: fallas registradas en la ECU -->
+      <span class="ind" id="indFault" title="Sin fallas registradas">⚠</span>
+
+      <!-- Afinación: alguna bandera de tuning activa -->
+      <span class="ind" id="indTuning" title="Condiciones de afinación OK">❄️</span>
+
+    </div>
+
+    <!-- Pill BLE -->
+    <div class="ble-pill">
+      <div class="dot" id="dot"></div>
+      <span id="statusTxt">Sin conexión BLE</span>
+    </div>
+
+    <button id="btnConnect" onclick="toggleBLE()">Conectar</button>
+  </div>
+</div>
+
+<!-- KWP STATUS STRIP — visible en todas las pestañas -->
+<div id="kwpStrip">
+  <div id="kwpDot"></div>
+  <span id="kwpStripTxt">K-Line: esperando conexión BLE al ESP32…</span>
+</div>
+
+<!-- APP -->
+<div id="app">
+
+  <!-- TABS -->
+  <div id="tabs">
+    <div class="tab active" onclick="showTab('pGauges',this)">Mediciones</div>
+    <div class="tab" onclick="showTab('pFlags',this)">Afinación</div>
+    <div class="tab" onclick="showTab('pFaults',this)" id="tabFaults">Fallas</div>
+  </div>
+
+  <!-- PANEL: GAUGES -->
+  <div class="panel active" id="pGauges">
+    <!-- se generan dinámicamente -->
+  </div>
+
+  <!-- PANEL: FLAGS -->
+  <div class="panel" id="pFlags">
+    <div class="flags-header">Digital Code Afinación — Grupo 1 · Zona 4</div>
+
+    <div class="flags-byte" id="flagsByte">
+      <!-- 8 bits -->
+    </div>
+
+    <div id="flagsList"></div>
+  </div>
+
+  <!-- PANEL: FAULTS -->
+  <div class="panel" id="pFaults">
+    <div id="faultsList">
+      <div class="no-faults">Sin fallas registradas</div>
+    </div>
+  </div>
+
+
+</div>
+<div id="statusBar">
+  <div class="sb-item">RPM <span id="sbRpm">—</span></div>
+  <div class="sb-item">TEMP <span id="sbTemp">—</span></div>
+  <div class="sb-item">VOLT <span id="sbVolt">—</span></div>
+  <div class="sb-item" style="margin-left:auto" id="sbTime">—</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// INDICADORES DE ESTADO EN EL HEADER
+// ═══════════════════════════════════════════════════════════════════
+//
+// indBle    🔵  BLE conectado al ESP32
+// indKwp    🔌  K-Line / KWP1281 con la ECU
+// indFault  🔴  Check engine (fallas en la ECU)
+// indTuning ⚙️  Banderas de afinación activas
+//
+// KWP states enviados por el ESP32 en campo "kwp":
+//   0 = Desconectado / esperando
+//   1 = 5-baud init en progreso
+//   2 = Handshake KWP en progreso
+//   3 = Conectado y leyendo OK
+//   4 = Error / timeout
+
+const KWP_LABELS = [
+  'K-Line: sin conexión con ECU',
+  'K-Line: enviando 5-baud init…',
+  'K-Line: handshake KWP1281 en progreso…',
+  'K-Line: comunicación activa con ECU ✓',
+  'K-Line: error de comunicación — reintentando en 5s',
+];
+
+const KWP_STRIP_CLASS = ['', 'ks-busy', 'ks-busy', 'ks-ok', 'ks-err'];
+
+function setInd(id, active, pulse, tooltip) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('active', active);
+  el.classList.toggle('pulse',  pulse);
+  if (tooltip) el.title = tooltip;
+}
+
+function updateIndicators(d) {
+  // ── KWP ──
+  const kwp     = d?.kwp ?? -1;   // -1 = no hay campo kwp en el JSON
+  const kwpOk   = kwp === 3;
+  const kwpBusy = kwp === 1 || kwp === 2;
+  const kwpErr  = kwp === 4;
+  const kwpKnown = kwp >= 0 && kwp <= 4;
+
+  if (kwpKnown) {
+    const label = KWP_LABELS[kwp];
+    setInd('indKwp', true, kwpBusy, label);
+    const kwpEl = document.getElementById('indKwp');
+    if (kwpEl) {
+      if      (kwpOk)   kwpEl.style.filter = 'hue-rotate(100deg)';  // verde
+      else if (kwpBusy) kwpEl.style.filter = 'hue-rotate(30deg) brightness(1.4)'; // ámbar
+      else if (kwpErr)  kwpEl.style.filter = 'hue-rotate(180deg)';  // rojo
+      else              kwpEl.style.filter = '';
+    }
+    // Strip
+    const strip = document.getElementById('kwpStrip');
+    const stripTxt = document.getElementById('kwpStripTxt');
+    if (strip) {
+      strip.className = KWP_STRIP_CLASS[kwp] ? KWP_STRIP_CLASS[kwp] : '';
+    }
+    if (stripTxt) stripTxt.textContent = label;
+  }
+
+  // ── Check engine / Fallas ──
+  const faultCount = d?.faults ?? 0;
+  setInd('indFault',
+    faultCount > 0,
+    faultCount > 0,
+    faultCount > 0
+      ? `⚠ ${faultCount} falla(s) en la ECU — ver pestaña Fallas`
+      : 'Sin fallas registradas'
+  );
+  const escFlt = document.getElementById('indFault');
+  if (escFlt) escFlt.style.filter = faultCount > 0  ? "sepia(1) saturate(10000%) hue-rotate(-20deg) brightness(1)" : ''; // cambia el color del emoji de peligo 
+  
+  const tf = document.getElementById('tabFaults');
+  if (tf) tf.style.color = faultCount > 0 ? 'var(--amber)' : ''; // cambia el color del texto de la pestana de fallas
+
+  // ── Banderas de afinación ──
+  const flags = d?.flags ?? -1;
+  if (flags >= 0) {
+    setInd('indTuning',
+      true,//flags !== 0,
+      false,
+      flags !== 0
+        ? `❄️ Afinación: ${d.flagDesc || 'bandera activa'}`
+        : 'Condiciones de afinación OK'
+    );
+  }
+}
+
+function setBleIndicator(on) {
+  setInd('indBle', on, false,
+    on ? 'BLE: conectado al ESP32 ✓' : 'BLE: sin conexión al ESP32'
+  );
+  if (!on) {
+    // Al perder BLE, resetear strip
+    const strip = document.getElementById('kwpStrip');
+    const stripTxt = document.getElementById('kwpStripTxt');
+    if (strip) strip.className = '';
+    if (stripTxt) stripTxt.textContent = 'K-Line: sin conexión BLE al ESP32';
+    setInd('indKwp',    false, false, KWP_LABELS[0]);
+    setInd('indFault',  false, false, 'Sin fallas registradas');
+    setInd('indTuning', false, false, 'Condiciones de afinación OK');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BLE CONFIG
+// ═══════════════════════════════════════════════════════════════════
+const SVC   = 'df180001-1234-1234-1234-000000000001';
+const MEAS  = 'df180002-1234-1234-1234-000000000001';
+const FAULT = 'df180003-1234-1234-1234-000000000001';
+
+let bleDevice, measChar, faultChar, connected = false;
+
+async function toggleBLE() {
+  if (connected) { bleDevice?.gatt?.disconnect(); return; }
+  setStatus('wait', 'Buscando ESP32…');
+  try {
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ name: 'Digifant-Monitor' }],
+      optionalServices: [SVC]
+    });
+    bleDevice.addEventListener('gattserverdisconnected', onDisc);
+    const server = await bleDevice.gatt.connect();
+    const svc    = await server.getPrimaryService(SVC);
+    measChar     = await svc.getCharacteristic(MEAS);
+    faultChar    = await svc.getCharacteristic(FAULT);
+    await measChar.startNotifications();
+    measChar.addEventListener('characteristicvaluechanged', onMeas);
+    await faultChar.startNotifications();
+    faultChar.addEventListener('characteristicvaluechanged', onFault);
+    connected = true;
+    setStatus('on', 'ESP32 conectado');
+    setBleIndicator(true);
+    // Mostrar KWP como "en espera" hasta recibir primer dato del ESP32
+    const strip = document.getElementById('kwpStrip');
+    const stripTxt = document.getElementById('kwpStripTxt');
+    if (strip) strip.className = 'ks-busy';
+    if (stripTxt) stripTxt.textContent = 'K-Line: esperando estado del ESP32…';
+    document.getElementById('btnConnect').textContent = 'Desconectar';
+    document.getElementById('btnConnect').classList.add('disc');
+  } catch(e) {
+    setStatus('err', e.message.substring(0, 28));
+    setTimeout(() => setStatus('', 'Sin conexión BLE'), 3000);
+  }
+}
+
+function onDisc() {
+  connected = false;
+  setStatus('', 'Sin conexión BLE');
+  setBleIndicator(false);
+  document.getElementById('btnConnect').textContent = 'Conectar';
+  document.getElementById('btnConnect').classList.remove('disc');
+}
+
+function setStatus(cls, txt) {
+  document.getElementById('dot').className = 'dot ' + cls;
+  document.getElementById('statusTxt').textContent = txt;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DATOS RECIBIDOS
+// ═══════════════════════════════════════════════════════════════════
+function onMeas(e) {
+  const txt = new TextDecoder().decode(e.target.value);
+  try {
+    const d = JSON.parse(txt);
+    updateIndicators(d);
+    if (d.rpm !== undefined) {          // paquete completo de mediciones
+      updateGauges(d);
+      updateFlags(d.flags || 0);
+      updateStatusBar(d);
+      document.getElementById('sbTime').textContent = new Date().toLocaleTimeString();
+    }
+  } catch(_) {}
+}
+
+function onFault(e) {
+  const txt = new TextDecoder().decode(e.target.value);
+  try {
+    const d = JSON.parse(txt);
+    const faults = d.faults || [];
+    // Pasar faultCount al actualizador de indicadores
+    updateIndicators({ faults: faults.length });
+    updateFaults(faults);
+  } catch(_) {}
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CONFIGURACION DE RELOJES
+// ═══════════════════════════════════════════════════════════════════
+const GAUGES = [
+  { key:'rpm',  label:'Motor RPM',     min:0,    max:6000, unit:'rpm',   color:'#00d4ff', zones:[{from:0,to:0.6,c:'#00e676'},{from:0.6,to:0.85,c:'#ffab00'},{from:0.85,to:1,c:'#ff3d3d'}] },
+  { key:'temp', label:'Temp. Motor',   min:0,    max:120,  unit:'°C',    color:'#ff7043', zones:[{from:0,to:0.6,c:'#00d4ff'},{from:0.6,to:0.9,c:'#00e676'},{from:0.9,to:1,c:'#ff3d3d'}] },
+  { key:'o2',   label:'Sonda Lambda',  min:0,    max:1.0,  unit:'V',     color:'#b388ff', zones:[{from:0,to:0.45,c:'#00d4ff'},{from:0.45,to:0.55,c:'#00e676'},{from:0.55,to:1,c:'#ffab00'}] },
+  { key:'inj',  label:'Inyección',     min:0,    max:10,   unit:'ms',    color:'#00e5ff', zones:[{from:0,to:0.5,c:'#00e676'},{from:0.5,to:0.8,c:'#ffab00'},{from:0.8,to:1,c:'#ff3d3d'}] },
+  { key:'volt', label:'Tensión',       min:10,   max:15,   unit:'V',     color:'#ffab00', zones:[{from:0,to:0.13,c:'#ff3d3d'},{from:0.13,to:0.8,c:'#00e676'},{from:0.8,to:1,c:'#ffab00'}] },
+  { key:'iat',  label:'Temp. Admisión',min:-20,  max:80,   unit:'°C',    color:'#80deea', zones:[{from:0,to:0.5,c:'#00d4ff'},{from:0.5,to:0.8,c:'#00e676'},{from:0.8,to:1,c:'#ff3d3d'}] },
+  { key:'idle', label:'Válvula Ralentí',min:0,  max:100,   unit:'mA',    color:'#a5d6a7', zones:[{from:0,to:1,c:'#00e676'}] },
+  { key:'load', label:'Carga Motor',   min:0,    max:100,  unit:'%',     color:'#ff8a65', zones:[{from:0,to:0.5,c:'#00e676'},{from:0.5,to:0.8,c:'#ffab00'},{from:0.8,to:1,c:'#ff3d3d'}] },
+  { key:'tps',  label:'Mariposa',      min:11,   max:103,  unit:'dig',   color:'#ce93d8', zones:[{from:0,to:1,c:'#b388ff'}] },
+  { key:'o2L',  label:'Aprend. Lambda',min:80,   max:140,  unit:'dig',   color:'#80cbc4', zones:[{from:0,to:0.35,c:'#ff3d3d'},{from:0.35,to:0.65,c:'#00e676'},{from:0.65,to:1,c:'#ff3d3d'}] },
+  { key:'baro', label:'Pres. Atm.',    min:900,  max:1050, unit:'hPa',   color:'#90caf9', zones:[{from:0,to:1,c:'#00d4ff'}] },
+  { key:'purge',label:'Válvula Purga', min:0,    max:100,  unit:'mA',    color:'#fff176', zones:[{from:0,to:1,c:'#ffab00'}] },
+];
+
+// Estado de distribución (arco histórico) por gauge
+const gaugeHistory = {};
+GAUGES.forEach(g => { gaugeHistory[g.key] = []; });
+
+// ═══════════════════════════════════════════════════════════════════
+// CONSTRUCCION INICIAL DE GAUGES
+// ═══════════════════════════════════════════════════════════════════
+const SIZE = 130; // canvas size px
+
+function buildGauges() {
+  const panel = document.getElementById('pGauges');
+  GAUGES.forEach(g => {
+    const wrap = document.createElement('div');
+    wrap.className = 'gauge-wrap';
+    wrap.innerHTML = `
+      <div class="gauge-label">${g.label}</div>
+      <canvas class="gauge-canvas" id="gc_${g.key}" width="${SIZE}" height="${SIZE}"></canvas>
+      <div class="gauge-val" id="gv_${g.key}">—</div>
+      <div class="gauge-unit">${g.unit}</div>
+    `;
+    panel.appendChild(wrap);
+    drawGauge(g.key, null);
+  });
+}
+
+// ─── DIBUJAR GAUGE ──────────────────────────────────────────────────
+// Orden de capas (de fondo a frente):
+//   1. Arco de fondo oscuro        (radio R, grosor lw)
+//   2. Arco de zonas semitransparentes (mismo radio)
+//   3. Arco de valor activo        (radio R, grosor lw — NO tapa dots)
+//   4. Puntos de distribución      (radio R_DOT > R — siempre visibles)
+//   5. Marcas de escala
+//   6. Aguja + centro
+const START_A = Math.PI * 0.75;
+const END_A   = Math.PI * 2.25;
+
+function drawGauge(key, value) {
+  const cfg = GAUGES.find(g => g.key === key);
+  if (!cfg) return;
+  const canvas = document.getElementById('gc_' + key);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const S  = SIZE;
+  const cx = S / 2, cy = S / 2;
+  const R      = S * 0.36;   // radio del arco principal
+  const lw     = S * 0.06;   // grosor del arco
+  const R_DOT  = R + lw * 0.95; // radio de los puntos, POR FUERA del arco
+
+  ctx.clearRect(0, 0, S, S);
+
+  // ── CAPA 1: arco de fondo ──
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, START_A, END_A);
+  ctx.strokeStyle = '#1a2030';
+  ctx.lineWidth   = lw;
+  ctx.lineCap     = 'butt';
+  ctx.stroke();
+
+  // ── CAPA 2: zonas de color (fondo semitransparente) ──
+  cfg.zones.forEach(z => {
+    const a1 = START_A + z.from * (END_A - START_A);
+    const a2 = START_A + z.to   * (END_A - START_A);
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, a1, a2);
+    ctx.strokeStyle = z.c + '28';
+    ctx.lineWidth   = lw;
+    ctx.lineCap     = 'butt';
+    ctx.stroke();
+  });
+
+  // ── CAPA 3: arco de valor activo ──
+  let col = cfg.color;
+  let t   = 0;
+  let needleA = START_A;
+
+  if (value !== null && value !== undefined && value !== -999) {
+    t       = Math.min(Math.max((value - cfg.min) / (cfg.max - cfg.min), 0), 1);
+    needleA = START_A + t * (END_A - START_A);
+    for (const z of cfg.zones) {
+      if (t >= z.from && t <= z.to) { col = z.c; break; }
+    }
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, START_A, needleA);
+    ctx.strokeStyle = col;
+    ctx.lineWidth   = lw;
+    ctx.lineCap     = 'round';
+    ctx.stroke();
+  }
+
+  // ── CAPA 4: puntos de distribución histórica (radio exterior) ──
+  const hist = gaugeHistory[key];
+  if (hist.length > 0) {
+    hist.forEach((v, idx) => {
+      const frac = Math.min(Math.max((v - cfg.min) / (cfg.max - cfg.min), 0), 1);
+      const a    = START_A + frac * (END_A - START_A);
+      // Opacidad creciente: puntos más recientes más visibles
+      const alpha = 0.25 + (idx / hist.length) * 0.65;
+      const dotX  = cx + R_DOT * Math.cos(a);
+      const dotY  = cy + R_DOT * Math.sin(a);
+      ctx.beginPath();
+      ctx.arc(dotX, dotY, lw * 0.22, 0, Math.PI * 2);
+      ctx.fillStyle = cfg.color + Math.round(alpha * 255).toString(16).padStart(2,'0');
+      ctx.fill();
+    });
+  }
+
+  // ── CAPA 5: marcas de escala ──
+  for (let i = 0; i <= 4; i++) {
+    const a  = START_A + (i / 4) * (END_A - START_A);
+    const r1 = R - lw * 0.55;
+    const r2 = R - lw * 1.05;
+    ctx.beginPath();
+    ctx.moveTo(cx + r1 * Math.cos(a), cy + r1 * Math.sin(a));
+    ctx.lineTo(cx + r2 * Math.cos(a), cy + r2 * Math.sin(a));
+    ctx.strokeStyle = '#3a4560';
+    ctx.lineWidth   = 1;
+    ctx.lineCap     = 'butt';
+    ctx.stroke();
+  }
+
+  // ── CAPA 6: aguja + centro ──
+  if (value === null || value === undefined || value === -999) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, lw * 0.45, 0, Math.PI * 2);
+    ctx.fillStyle = '#1a2030';
+    ctx.fill();
+    return;
+  }
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(needleA);
+  ctx.beginPath();
+  ctx.moveTo(-R * 0.10, 0);
+  ctx.lineTo(R * 0.68, 0);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth   = 1.5;
+  ctx.lineCap     = 'round';
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, lw * 0.45, 0, Math.PI * 2);
+  ctx.fillStyle = col;
+  ctx.fill();
+}
+
+// ─── ACTUALIZAR TODOS LOS GAUGES ────────────────────────────────────
+function updateGauges(d) {
+  GAUGES.forEach(g => {
+    const val = d[g.key];
+    if (val === undefined || val === null || val === -999) return;
+
+    // Actualizar historial (max 60 puntos)
+    gaugeHistory[g.key].push(val);
+    if (gaugeHistory[g.key].length > 60) gaugeHistory[g.key].shift();
+
+    drawGauge(g.key, val);
+
+    const el = document.getElementById('gv_' + g.key);
+    if (el) {
+      const fmt = Number.isInteger(val) ? val : val.toFixed(2);
+      el.textContent = fmt;
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BANDERAS DE AFINACION
+// ═══════════════════════════════════════════════════════════════════
+const FLAG_DEFS = [
+  { bit:0, label:'Temperatura de motor no alcanzada',    detail:'Motor frío, esperar calentamiento' },
+  { bit:1, label:'RPM superiores a 2000/min',            detail:'Carga alta, no afinará' },
+  { bit:2, label:'Potenciómetro de mariposa fuera tol.', detail:'Revisar TPS o ajuste mecánico' },
+  { bit:3, label:'Func. incorrecto regulación lambda',   detail:'Revisar sonda O2, inyectores, vacío' },
+  { bit:4, label:'Aire acondicionado conectado',         detail:'El A/C aumenta la carga en ralentí' },
+];
+
+function buildFlags() {
+  // Bits
+  const byteEl = document.getElementById('flagsByte');
+  for (let i = 7; i >= 0; i--) {
+    const b = document.createElement('div');
+    b.className = 'bit-box';
+    b.id = 'bit' + i;
+    b.textContent = '0';
+    byteEl.appendChild(b);
+  }
+
+  // Filas
+  const list = document.getElementById('flagsList');
+  FLAG_DEFS.forEach(f => {
+    const row = document.createElement('div');
+    row.className = 'flag-row';
+    row.id = 'flagrow' + f.bit;
+    row.innerHTML = `
+      <div class="flag-bit-indicator" id="flagind${f.bit}">B${f.bit}</div>
+      <div class="flag-text">${f.label}<small>${f.detail}</small></div>
+    `;
+    list.appendChild(row);
+  });
+
+  // Fila OK
+  const ok = document.createElement('div');
+  ok.className = 'flag-row ok-row';
+  ok.id = 'flagOK';
+  ok.innerHTML = `
+    <div class="flag-bit-indicator" style="background:var(--green);color:#000;border-color:var(--green)">✓</div>
+    <div class="flag-text">Funcionamiento correcto<small>Todos los bits en cero — condiciones de afinación OK</small></div>
+  `;
+  list.appendChild(ok);
+}
+
+function updateFlags(flags) {
+  // Bits visuales
+  for (let i = 0; i < 8; i++) {
+    const el = document.getElementById('bit' + i);
+    if (!el) continue;
+    const set = !!(flags & (1 << i));
+    el.textContent = set ? '1' : '0';
+    el.className = 'bit-box' + (set ? ' set' : '');
+  }
+
+  // Filas
+  FLAG_DEFS.forEach(f => {
+    const set = !!(flags & (1 << f.bit));
+    const row = document.getElementById('flagrow' + f.bit);
+    const ind = document.getElementById('flagind' + f.bit);
+    if (row) row.className = 'flag-row' + (set ? ' active' : '');
+    if (ind) ind.className = 'flag-bit-indicator' + (set ? ' set' : '');
+  });
+
+  const okRow = document.getElementById('flagOK');
+  if (okRow) okRow.style.display = (flags === 0) ? '' : 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FALLAS
+// ═══════════════════════════════════════════════════════════════════
+
+// Tabla de descripciones locales (Digifant 043 906 022 E)
+const DTC_TABLE = {
+  515:  { msg:'Hall Sender G40 — circuito abierto o cortocircuito',   cause:'Cableado o parte defectuosa' },
+  518:  { msg:'Posición Mariposa G88 — circuito abierto o cortocircuito', cause:'Cableado o parte defectuosa' },
+  519:  { msg:'Sensor Presión Admisión G71 — sin señal',              cause:'Sensor defectuoso, tubería a colector' },
+  522:  { msg:'Sensor Temperatura Motor G27 — circuito abierto',      cause:'Parte defectuosa o contactos oxidados' },
+  523:  { msg:'Sensor Temperatura Admisión G42',                      cause:'Cableado o parte defectuosa' },
+  525:  { msg:'Sonda Lambda G39 — sin señal',                         cause:'Cableado o parte defectuosa' },
+  532:  { msg:'Tensión de alimentación fuera de rango',               cause:'Debe ser 10-16 V' },
+  533:  { msg:'Control de ralentí demasiado alto/bajo',               cause:'Válvula N71; conector; fugas de aire' },
+  537:  { msg:'Regulación lambda fuera de rango',                     cause:'Sonda O2; fuga escape/admisión; inyector; válvula purga; presión combustible alta' },
+  561:  { msg:'Adaptación mezcla fuera de rango',                     cause:'Presión comb.; inyector; fuga admisión/escape; válvula purga abierta' },
+  69:   { msg:'Salida de ignición en cortocircuito',                  cause:'Revisar transformador N57' },
+  1247: { msg:'Válvula purga N80 — abierta o cortocircuito',          cause:'Cableado o parte defectuosa' },
+  1257: { msg:'Válvula estabilización ralentí N71 — cortocircuito',   cause:'Cableado o parte defectuosa' },
+  1259: { msg:'Relé bomba combustible J17 — cortocircuito positivo',  cause:'Cableado' },
+  65535:{ msg:'Unidad de control defectuosa',                         cause:'Reemplazar ECU J169' },
+};
+
+function updateFaults(faults) {
+  const list = document.getElementById('faultsList');
+  const tab  = document.getElementById('tabFaults');
+
+  list.innerHTML = '';
+
+  if (!faults || faults.length === 0) {
+    list.innerHTML = '<div class="no-faults">Sin fallas registradas</div>';
+    tab.style.color = '';
+    return;
+  }
+
+  tab.style.color = 'var(--red)';
+
+  faults.forEach(f => {
+    const local = DTC_TABLE[f.code];
+    const msg   = local ? local.msg   : (f.desc || 'Código desconocido');
+    const cause = local ? local.cause : '';
+
+    const card = document.createElement('div');
+    card.className = 'fault-card';
+    card.innerHTML = `
+      <div class="fault-code">DTC ${String(f.code).padStart(5,'0')}  elab:${f.elab.toString().padStart(3,'0')}</div>
+      <div class="fault-desc">${msg}</div>
+      ${cause ? `<div class="fault-elab">→ ${cause}</div>` : ''}
+    `;
+    list.appendChild(card);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// STATUS BAR
+// ═══════════════════════════════════════════════════════════════════
+function updateStatusBar(d) {
+  document.getElementById('sbRpm').textContent  = d.rpm  !== undefined ? d.rpm + ' rpm' : '—';
+  document.getElementById('sbTemp').textContent = d.temp !== undefined ? d.temp.toFixed(0) + '°C' : '—';
+  document.getElementById('sbVolt').textContent = d.volt !== undefined ? d.volt.toFixed(1) + 'V' : '—';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════════════
+function showTab(id, el) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════
+buildGauges();
+buildFlags();
+updateFlags(0);
+
+// Verificar soporte BLE
+if (!navigator.bluetooth) {
+  document.getElementById('statusTxt').textContent = 'BLE no soportado';
+  document.getElementById('dot').className = 'dot err';
+  document.getElementById('btnConnect').disabled = true;
+}
+
+// Demo: simular datos si no hay BLE (descomenta para probar en PC)
+/*
+setInterval(() => {
+  const d = {
+    rpm: 800 + Math.random()*200, temp: 85+Math.random()*5,
+    o2: Math.random(), inj: 2.5+Math.random(), volt: 13.5+Math.random()*.5,
+    iat: 30+Math.random()*5, idle: 30+Math.random()*10, load: 20+Math.random()*5,
+    tps: 15+Math.random()*3, o2L: 110+Math.random()*10, baro: 1013,
+    purge: Math.random()*5, flags: Math.random()>.8?1:0, lDec:70, flagDesc:''
+  };
+  updateGauges(d); updateFlags(d.flags); updateStatusBar(d);
+}, 1000);
+*/
+</script>
+</body>
+</html>
