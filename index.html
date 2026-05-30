@@ -516,7 +516,7 @@ function updateIndicators(d) {
   const flags = d?.flags ?? -1;
   if (flags >= 0) {
     setInd('indTuning',
-      true,//flags !== 0,
+      flags !== 0,
       false,
       flags !== 0
         ? `❄️ Afinación: ${d.flagDesc || 'bandera activa'}`
