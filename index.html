@@ -195,7 +195,7 @@ html, body {
   font-size: 9px;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: var(--muted);
+  color: #ffffff;
   margin-bottom: 2px;
   font-family: var(--font-ui);
 }
@@ -212,7 +212,7 @@ html, body {
 
 .gauge-unit {
   font-size: 9px;
-  color: var(--muted);
+  color: #ffffff;
   margin-top: 1px;
   font-family: var(--font-ui);
 }
@@ -748,7 +748,7 @@ function drawGauge(key, value) {
     });
   }
 
-  // ── CAPA 5: marcas de escala ──
+  // ── CAPA 5: marcas de escala + números ──
   for (let i = 0; i <= 4; i++) {
     const a  = START_A + (i / 4) * (END_A - START_A);
     const r1 = R - lw * 0.55;
@@ -760,6 +760,22 @@ function drawGauge(key, value) {
     ctx.lineWidth   = 1;
     ctx.lineCap     = 'butt';
     ctx.stroke();
+
+    // Número de escala
+    const labelVal = cfg.min + (i / 4) * (cfg.max - cfg.min);
+    const labelStr = Math.abs(labelVal) >= 1000
+      ? (labelVal / 1000).toFixed(1) + 'k'
+      : Number.isInteger(labelVal) ? String(labelVal) : labelVal.toFixed(1);
+    const rTxt = R - lw * 1.75;
+    const tx = cx + rTxt * Math.cos(a);
+    const ty = cy + rTxt * Math.sin(a);
+    ctx.save();
+    ctx.font = `bold ${Math.round(S * 0.072)}px monospace`;
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(labelStr, tx, ty);
+    ctx.restore();
   }
 
   // ── CAPA 6: aguja + centro ──
